@@ -22,7 +22,7 @@ func createToken(user User) (string, error) {
 	// Token を作成
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"email": user.Email,
-		"iss":   "__init__", // JWT の発行者が入る(文字列(__init__)は任意)
+		"iss":   "FunCloudAPI", // JWT の発行者が入る(文字列は任意)
 	})
 
 	//Dumpを吐く
