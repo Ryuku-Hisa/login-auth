@@ -8,9 +8,12 @@ import (
     "net/http"
 
     "github.com/gorilla/mux"
+    "github.com/davecgh/go-spew/spew"
+    "github.com/dgrijalva/jwt-go"
     "golang.org/x/crypto/bcrypt"
     _ "github.com/go-sql-driver/mysql"
 )
+
 
 type User struct {
     // 大文字だと Public 扱い
@@ -38,14 +41,13 @@ func responseByJSON(w http.ResponseWriter, data interface{}) {
     return
 }
 
+
 func signup(w http.ResponseWriter, r *http.Request) {
     var user User
     var error Error
 
-    // r.body に何が帰ってくるか確認
     fmt.Println(r.Body)
 
-    // https://golang.org/pkg/encoding/json/#NewDecoder
     json.NewDecoder(r.Body).Decode(&user)
 
     if user.Email == "" {
@@ -108,14 +110,112 @@ func signup(w http.ResponseWriter, r *http.Request) {
 
     // JSON 形式で結果を返却
     responseByJSON(w, user)
-
-    defer db.Close()
 }
+
+
+func createToken(user User) (string, error) {
+    var err error
+
+    // 鍵となる文字列(多分なんでもいい)
+    secret := "auth-using-go"
+
+    // Token を作成
+    // jwt -> JSON Web Token - JSON をセキュアにやり取りするための仕様
+    // jwtの構造 -> {Base64 encoded Header}.{Base64 encoded Payload}.{Signature}
+    // HS254 -> 証明生成用(https://ja.wikipedia.org/wiki/JSON_Web_Token)
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+        "email": user.Email,
+        "iss":   "__init__", // JWT の発行者が入る(文字列(__init__)は任意)
+    })
+
+   //Dumpを吐く
+    spew.Dump(token)
+
+    tokenString, err := token.SignedString([]byte(secret))
+
+    fmt.Println("-----------------------------")
+    fmt.Println("tokenString:", tokenString)
+
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    return tokenString, nil
+}
+
 
 func login(w http.ResponseWriter, r *http.Request) {
-    w.Write([]byte("successfully called login"))
+    var user User
+    var error Error
+    var jwt JWT
 
+    json.NewDecoder(r.Body).Decode(&user)
+
+    if user.Email == "" {
+        error.Message = "Email は必須です．"
+        errorInResponse(w, http.StatusBadRequest, error)
+        return
+    }
+
+    if user.Password == "" {
+        error.Message = "パスワードは、必須です．"
+        errorInResponse(w, http.StatusBadRequest, error)
+    }
+
+    password := user.Password
+    fmt.Println("password: ", password)
+
+     // データベースに接続
+     db, err := sql.Open("mysql", "root:hoge@/authdb")
+     if err != nil {
+         log.Fatal(err)
+     }
+ 
+     err = db.Ping()
+     if err != nil {
+         log.Fatal(err)
+     }
+ 
+     defer db.Close()
+
+
+    // 認証キー(Emal)のユーザー情報をDBから取得
+    row := db.QueryRow("SELECT * FROM users WHERE email = ?;", user.Email)
+    
+    err = row.Scan(&user.ID, &user.Email, &user.Password)
+    if err != nil {
+        if err == sql.ErrNoRows {
+            error.Message = "ユーザが存在しません。"
+            errorInResponse(w, http.StatusBadRequest, error)
+        } else {
+            log.Fatal(err)
+        }
+    }
+
+    hasedPassword := user.Password
+    fmt.Println("hasedPassword: ", hasedPassword)
+
+    err = bcrypt.CompareHashAndPassword([]byte(hasedPassword), []byte(password))
+
+    if err != nil {
+        error.Message = "無効なパスワードです。"
+        errorInResponse(w, http.StatusUnauthorized, error)
+        return
+    }
+
+    token, err := createToken(user)
+
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    w.WriteHeader(http.StatusOK)
+    jwt.Token = token
+
+    responseByJSON(w, jwt)
 }
+
+
 
 var db *sql.DB
 
