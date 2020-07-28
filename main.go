@@ -7,8 +7,8 @@ import (
     "log"
     "net/http"
 
-    "github.com/davecgh/go-spew/spew"
     "github.com/gorilla/mux"
+    "golang.org/x/crypto/bcrypt"
     _ "github.com/go-sql-driver/mysql"
 )
 
@@ -33,6 +33,11 @@ func errorInResponse(w http.ResponseWriter, status int, error Error) {
     return
 }
 
+func responseByJSON(w http.ResponseWriter, data interface{}) {
+    json.NewEncoder(w).Encode(data)
+    return
+}
+
 func signup(w http.ResponseWriter, r *http.Request) {
     var user User
     var error Error
@@ -44,24 +49,67 @@ func signup(w http.ResponseWriter, r *http.Request) {
     json.NewDecoder(r.Body).Decode(&user)
 
     if user.Email == "" {
-        error.Message = "Email は必須です。"
+        error.Message = "Email は必須です．"
         errorInResponse(w, http.StatusBadRequest, error)
         return
     }
 
     if user.Password == "" {
-        error.Message = "パスワードは必須です。"
+        error.Message = "パスワードは必須です．"
         errorInResponse(w, http.StatusBadRequest, error)
         return
     }
 
-    // user に何が格納されているのか
-    fmt.Println(user)
 
-    // dump も出せる
     fmt.Println("---------------------")
-    spew.Dump(user)
+    
+    // パスワードのハッシュを生成
+    hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), 10)
+    if err != nil {
+        log.Fatal(err)
+    }
 
+    fmt.Println("パスワード: ", user.Password)
+    fmt.Println("ハッシュ化されたパスワード", hash)
+
+    user.Password = string(hash)
+    fmt.Println("コンバート後のパスワード: ", user.Password)
+
+
+    // データベースに接続
+    db, err := sql.Open("mysql", "root:hoge@/authdb")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    err = db.Ping()
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    defer db.Close()
+
+    // query 発行
+    // Scan で、Query 結果を変数に格納
+    ins, err := db.Prepare("INSERT INTO users(email, password) VALUES(?, ?);")
+    if err != nil {
+        error.Message = "データベース処理に失敗しました"
+        errorInResponse(w, http.StatusInternalServerError, error)
+        return
+    }
+    
+    ins.Exec(user.Email, user.Password)
+
+    defer ins.Close()
+
+    // DB に登録できたらパスワードをからにしておく
+    user.Password = ""
+    w.Header().Set("Content-Type", "application/json")
+
+    // JSON 形式で結果を返却
+    responseByJSON(w, user)
+
+    defer db.Close()
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +129,8 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
+
+    defer db.Close()
 
     // temp_email := "mail"
 
