@@ -62,7 +62,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("password: ", password)
 
 	// データベースに接続
-	db, err := sql.Open("mysql", "root:hoge@/authdb")
+	db, err := sql.Open("mysql", DBLocation())
 	if err != nil {
 		log.Fatal(err)
 	}

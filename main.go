@@ -22,7 +22,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 var db *sql.DB
 
 func main() {
-	db, err := sql.Open("mysql", "root:hoge@/authdb")
+	db, err := sql.Open("mysql", authFunctions.DBLocation())
 	if err != nil {
 		log.Fatal(err)
 	}
