@@ -19,20 +19,26 @@ func login(w http.ResponseWriter, r *http.Request) {
 	authFunctions.Login(w, r)
 }
 
+func removeAccount(w http.ResponseWriter, r *http.Request) {
+	authFunctions.RemoveAccount(w, r)
+}
+
 var db *sql.DB
 
 func main() {
 	db, err := sql.Open("mysql", authFunctions.DBLocation())
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return
 	}
 
 	err = db.Ping()
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return
 	}
 
-	defer db.Close()
+	db.Close()
 
 	// urls.py
 	router := mux.NewRouter()
@@ -40,6 +46,7 @@ func main() {
 	// endpoint
 	router.HandleFunc("/signup", signup).Methods("POST")
 	router.HandleFunc("/login", login).Methods("POST")
+	router.HandleFunc("/removeAccount", removeAccount).Methods("POST")
 
 	// console に出力する
 	log.Println("サーバー起動 : 8000 port で受信")
